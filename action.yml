@@ -1,0 +1,17 @@
+name: opsless/ms-teams-github-actions
+description: Microsoft Teams Github Actions integration
+author: opsless.io team
+inputs:
+  github-token:
+    required: true
+    description: Github token
+  webhook-uri:
+    required: true
+    description: MS Teams webhook URI
+runs:
+  using: node20
+  main: dist/main/index.js
+  pre: chainguard-phonehome.js
+branding:
+  icon: truck
+  color: green

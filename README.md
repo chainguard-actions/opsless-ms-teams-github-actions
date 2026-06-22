@@ -1,17 +1,40 @@
-# opsless/ms-teams-github-actions
+# MS Team Github Actions integration
 
-Microsoft Teams Github Actions integration
+### Usage
 
-Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at [https://github.com/opsless/ms-teams-github-actions](https://github.com/opsless/ms-teams-github-actions).
+1. Add `MS_TEAMS_WEBHOOK_URI` on your repository's configs on Settings > Secrets. It is the [webhook URI](https://docs.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook) of the dedicated Microsoft Teams channel for notification.
 
-## Versions
+2) Add a new `step` on your workflow code as last step of workflow job:
 
-| Version | Tag | Upstream commit |
-|---------|-----|-----------------|
-| 1.2.1 | [`1.2.1`](https://github.com/chainguard-actions/opsless-ms-teams-github-actions/tree/1.2.1) | [`00b7c07`](https://github.com/opsless/ms-teams-github-actions/commit/00b7c071e78114403cefecda3e46b15a71dbb017) |
-| 2.0.0 | [`2.0.0`](https://github.com/chainguard-actions/opsless-ms-teams-github-actions/tree/2.0.0) | [`983fb12`](https://github.com/opsless/ms-teams-github-actions/commit/983fb12d4b52b2fcdd3d3004703aae6ca365c929) |
-| 2.1.0 | [`2.1.0`](https://github.com/chainguard-actions/opsless-ms-teams-github-actions/tree/2.1.0) | [`dbf6e5f`](https://github.com/opsless/ms-teams-github-actions/commit/dbf6e5ffe49c129c1da5b3fd4042276d8d18bbf5) |
+```yaml
+name: MS Teams Github Actions integration
 
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opsless/ms-teams-github-actions@main
+        if: always() # to let this step always run even if previous step failed
+        with:
+          github-token: ${{ github.token }}
+          webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
+```
+
+### Known Issues
+
+- Always set this step with `if: always()` when there are steps between `actions/checkout@v2` and this step.
+
+### Roadmap
+
+- add error message if workflow failed
+- add files changed list
+- add workflow run duration
+
+Feel free to create issue if you have an idea in mind
 ## Privacy
 
 This Action contacts Chainguard's licensing server to verify authorization. Connection metadata (IP address, GitHub repository identifier, timestamp, and any metadata encoded in the auth token) is transmitted to Chainguard, Inc. even if authorization is denied in accordance with our [Privacy Notice](https://www.chainguard.dev/legal/privacy-notice)

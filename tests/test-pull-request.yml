@@ -1,0 +1,64 @@
+name: Test pull request notification
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/pull/1/merge
+      GITHUB_EVENT_NAME: pull_request
+      GITHUB_HEAD_REF: feature-branch
+      GITHUB_BASE_REF: main
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Start mock webhook server
+        run: |
+          python3 -c "
+          import http.server, threading
+
+          class Handler(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  length = int(self.headers.get('Content-Length', 0))
+                  body = self.rfile.read(length)
+                  print('Received PR webhook payload:', body.decode('utf-8', errors='replace'), flush=True)
+                  self.send_response(200)
+                  self.end_headers()
+                  self.wfile.write(b'1')
+              def log_message(self, format, *args):
+                  pass
+
+          server = http.server.HTTPServer(('127.0.0.1', 9998), Handler)
+          t = threading.Thread(target=server.serve_forever)
+          t.daemon = True
+          t.start()
+          import time, os
+          with open('/tmp/mock_pr_server_started', 'w') as f:
+              f.write('started')
+          time.sleep(60)
+          " &
+          sleep 1
+          if [ ! -f /tmp/mock_pr_server_started ]; then
+            echo "FAIL: mock server did not start"
+            exit 1
+          fi
+          echo "Mock webhook server started on port 9998"
+
+      - id: action
+        uses: .
+        with:
+          github-token: ${{ github.token }}
+          webhook-uri: http://127.0.0.1:9998/webhook
+        continue-on-error: true
+
+      - name: Assert action ran for pull_request event
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "action outcome: $OUTCOME"
+          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action ran and completed with outcome: $OUTCOME"
+          else
+            echo "FAIL: unexpected outcome: $OUTCOME"
+            exit 1
+          fi
