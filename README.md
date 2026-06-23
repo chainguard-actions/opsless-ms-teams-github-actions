@@ -13,6 +13,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 | 1.3.0 | [`1.3.0`](https://github.com/chainguard-actions/opsless-ms-teams-github-actions/tree/1.3.0) | [`4a7f4c4`](https://github.com/opsless/ms-teams-github-actions/commit/4a7f4c4fa8fb1d363f95ba7a3a0122b3462beb24) |
 | 2.0.0 | [`2.0.0`](https://github.com/chainguard-actions/opsless-ms-teams-github-actions/tree/2.0.0) | [`983fb12`](https://github.com/opsless/ms-teams-github-actions/commit/983fb12d4b52b2fcdd3d3004703aae6ca365c929) |
 | 2.1.0 | [`2.1.0`](https://github.com/chainguard-actions/opsless-ms-teams-github-actions/tree/2.1.0) | [`dbf6e5f`](https://github.com/opsless/ms-teams-github-actions/commit/dbf6e5ffe49c129c1da5b3fd4042276d8d18bbf5) |
+| 2.4.0 | [`2.4.0`](https://github.com/chainguard-actions/opsless-ms-teams-github-actions/tree/2.4.0) | [`658ba7e`](https://github.com/opsless/ms-teams-github-actions/commit/658ba7e3494633cf39a5ea23117a0847706e3e94) |
 
 ## Privacy
 
