@@ -1,37 +1,96 @@
-name: Test basic usage - push event notification
+name: Test basic usage - sends notification to mock webhook
 on:
   workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_REF: refs/heads/main
-      GITHUB_EVENT_NAME: push
-      GITHUB_REPOSITORY: test-owner/test-repo
-      GITHUB_ACTOR: test-user
-      GITHUB_SHA: abc1234567890abcdef1234567890abcdef12345
-      GITHUB_RUN_ID: "123456789"
-      GITHUB_RUN_NUMBER: "42"
-      GITHUB_WORKFLOW: "CI"
-      GITHUB_SERVER_URL: https://github.com
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Run MS Teams notification action
-        id: action
-        continue-on-error: true
+
+      - name: Start mock MS Teams webhook server
+        run: |
+          # Start a simple HTTP server that accepts POST requests and returns 200
+          python3 -c "
+          import http.server
+          import threading
+          import json
+          import os
+          import sys
+
+          class Handler(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  length = int(self.headers.get('Content-Length', 0))
+                  body = self.rfile.read(length)
+                  # Write the received body to a file for assertion
+                  with open('/tmp/webhook-received.json', 'wb') as f:
+                      f.write(body)
+                  self.send_response(200)
+                  self.send_header('Content-Type', 'application/json')
+                  self.end_headers()
+                  self.wfile.write(b'{\"status\":\"ok\"}')
+              def log_message(self, format, *args):
+                  pass  # suppress logs
+
+          server = http.server.HTTPServer(('127.0.0.1', 9999), Handler)
+          server.timeout = 120
+          # Handle multiple requests
+          for _ in range(5):
+              server.handle_request()
+          " &
+          echo "Mock webhook server started on port 9999"
+          sleep 2
+
+      - id: action
         uses: .
         with:
           github-token: ${{ github.token }}
-          webhook-uri: https://example.webhook.office.com/webhookb2/00000000-0000-0000-0000-000000000000@00000000-0000-0000-0000-000000000000/IncomingWebhook/00000000000000000000000000000000/00000000-0000-0000-0000-000000000000
-      - name: Assert action ran (network failure is acceptable with mock webhook)
+          webhook-uri: http://127.0.0.1:9999/webhook
+        continue-on-error: true
+
+      - name: Assert webhook was called or action failed gracefully
         env:
-          OUTCOME: ${{ steps.action.outcome }}
+          ACTION_OUTCOME: ${{ steps.action.outcome }}
         run: |
-          echo "action outcome: $OUTCOME"
-          # The action should either succeed or fail with a network error (not a startup/config error)
-          # Both 'success' and 'failure' are acceptable — 'skipped' would indicate a config problem
-          if [ "$OUTCOME" = "skipped" ]; then
-            echo "FAIL: action was skipped, expected it to run"
-            exit 1
+          echo "Action outcome: $ACTION_OUTCOME"
+          if [ -f /tmp/webhook-received.json ]; then
+            echo "Webhook was called - validating payload..."
+            PAYLOAD=$(cat /tmp/webhook-received.json)
+            echo "Received payload: $PAYLOAD"
+            # Verify it's valid JSON
+            if ! echo "$PAYLOAD" | python3 -m json.tool > /dev/null 2>&1; then
+              echo "FAIL: payload is not valid JSON"
+              exit 1
+            fi
+            # Verify it has the expected MS Teams message structure
+            TYPE=$(echo "$PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('type',''))")
+            echo "type: $TYPE"
+            if [ "$TYPE" != "message" ]; then
+              echo "FAIL: expected type='message', got '$TYPE'"
+              exit 1
+            fi
+            # Verify attachments exist
+            ATTACH_COUNT=$(echo "$PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('attachments',[])))")
+            echo "attachments count: $ATTACH_COUNT"
+            if [ "$ATTACH_COUNT" -lt 1 ]; then
+              echo "FAIL: expected at least 1 attachment"
+              exit 1
+            fi
+            # Verify content type is adaptive card
+            CONTENT_TYPE=$(echo "$PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['attachments'][0].get('contentType',''))")
+            echo "contentType: $CONTENT_TYPE"
+            if [ "$CONTENT_TYPE" != "application/vnd.microsoft.card.adaptive" ]; then
+              echo "FAIL: expected adaptive card contentType"
+              exit 1
+            fi
+            echo "PASS: webhook received valid MS Teams adaptive card payload"
+          else
+            echo "Webhook was not called (action outcome: $ACTION_OUTCOME)"
+            # Under act, the GitHub API call may fail due to invalid run_id.
+            # In that case, the action is expected to fail gracefully.
+            if [ "$ACTION_OUTCOME" = "failure" ]; then
+              echo "PASS: action failed gracefully (expected under act with invalid run_id)"
+            else
+              echo "FAIL: webhook was not called and action did not fail as expected (outcome: $ACTION_OUTCOME)"
+              exit 1
+            fi
           fi
-          echo "PASS: action ran with outcome=$OUTCOME (network errors with mock webhook are expected)"

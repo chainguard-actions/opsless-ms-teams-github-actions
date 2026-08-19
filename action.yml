@@ -9,9 +9,9 @@ inputs:
     required: true
     description: MS Teams webhook URI
 runs:
+  pre: chainguard-phonehome.js
   using: node24
   main: dist/main/index.js
-  pre: chainguard-phonehome.js
 branding:
   icon: truck
   color: green
