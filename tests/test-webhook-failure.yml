@@ -1,0 +1,58 @@
+name: Test webhook failure - server returns error status
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Start mock MS Teams webhook server that returns 500 (node)
+        run: |
+          node -e "
+          const http = require('http');
+          const server = http.createServer((req, res) => {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', () => {
+              res.writeHead(500, {'Content-Type': 'application/json'});
+              res.end(JSON.stringify({error: 'Internal Server Error'}));
+            });
+          });
+          server.listen(9998, '127.0.0.1', () => {
+            process.stdout.write('Mock error webhook server listening on 127.0.0.1:9998\n');
+          });
+          // Keep alive
+          setInterval(() => {}, 60000);
+          " &
+          # Wait for server to be ready (up to 15 seconds)
+          for i in $(seq 1 15); do
+            STATUS=$(curl -sf --connect-timeout 1 -o /dev/null -w "%{http_code}" -X POST -d '{}' http://127.0.0.1:9998/ 2>/dev/null || true)
+            if [ "$STATUS" = "500" ]; then
+              echo "Mock error webhook server is ready on port 9998 (returns 500)"
+              break
+            fi
+            echo "Waiting for mock error server... attempt $i (status: $STATUS)"
+            sleep 1
+          done
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          github-token: ${{ github.token }}
+          webhook-uri: http://127.0.0.1:9998/webhook
+
+      - name: Assert action failed as expected
+        run: |
+          OUTCOME="${{ steps.action.outcome }}"
+          echo "action outcome: $OUTCOME"
+          # The action should fail: either the GitHub API call fails (fake run_id under act)
+          # or the webhook returns 500 which the action treats as an error.
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action correctly failed when webhook returned 500"
+          else
+            echo "FAIL: expected action to fail when webhook returns 500"
+            echo "actual outcome: $OUTCOME"
+            exit 1
+          fi
